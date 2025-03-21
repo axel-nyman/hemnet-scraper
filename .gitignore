@@ -1,0 +1,49 @@
+# Logs
+logs/
+*.log
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+
+# IDE specific files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Docker related
+docker-compose.override.yml
+.dockerignore
+
+# Data files that might be generated during scraping
+*.json
+*.csv
+*.xlsx
+*.db
+*.sqlite
+
+# Sensitive data
+config.ini
+secrets.py
+.env.local
+
+# Playwright browser data
+**/playwright-downloads
+**/playwright/.cache/
