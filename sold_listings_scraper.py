@@ -141,34 +141,6 @@ def get_sold_listing_urls(page_number, browser):
             page.close()
         return []
 
-def extract_hemnet_ids(html_content):
-    soup = BeautifulSoup(html_content, 'html.parser')
-    
-    # Find all <script> tags
-    script_tags = soup.find_all("script")
-    
-    for script in script_tags:
-        if script.string and 'saleId' in script.string:
-            try:
-                # Extract JSON content
-                json_text = re.search(r'({.*})', script.string, re.DOTALL)
-                if json_text:
-                    data = json.loads(json_text.group(1))
-                    
-                    # Navigate to the relevant section
-                    sale_id = data.get("props", {}).get("pageProps", {}).get("saleId")
-                    listings = data.get("props", {}).get("pageProps", {}).get("__APOLLO_STATE__", {})
-                    
-                    original_listing_id = None
-                    if sale_id and f"SoldPropertyListing:{sale_id}" in listings:
-                        original_listing_id = listings[f"SoldPropertyListing:{sale_id}"].get("listingId")
-                    
-                    return sale_id, original_listing_id
-            except json.JSONDecodeError:
-                continue
-    
-    return None, None
-
 def extract_listing_data_from_json(html_content):
     """Extract all listing data from the embedded JSON in the page"""
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -177,7 +149,8 @@ def extract_listing_data_from_json(html_content):
     next_data_script = soup.find("script", id="__NEXT_DATA__")
     
     if not next_data_script or not next_data_script.string:
-        return None, None, {}, False
+        logger.warning("No __NEXT_DATA__ script found in the page")
+        return None, None, {}
     
     try:
         # Parse the JSON data
@@ -187,46 +160,54 @@ def extract_listing_data_from_json(html_content):
         page_props = data.get("props", {}).get("pageProps", {})
         sale_id = page_props.get("saleId")
         
+        if not sale_id:
+            logger.warning("No sale ID found in the page data")
+            return None, None, {}
+        
         # Get Apollo state which contains the listing data
         apollo_state = page_props.get("__APOLLO_STATE__", {})
         
         # Find the listing data using the sale ID
         listing_key = f"SoldPropertyListing:{sale_id}"
         
-        if listing_key in apollo_state:
-            listing_data = apollo_state[listing_key]
-            original_listing_id = listing_data.get("listingId")
-            sale_date_str = listing_data.get("formattedSoldAt", "")
-            sale_date_datetime = parse_swedish_date(sale_date_str)
+        if listing_key not in apollo_state:
+            logger.warning(f"Listing key {listing_key} not found in Apollo state")
+            return None, None, {}
             
-            # Extract using amount values instead of formatted values
-            extracted_data = {
-                "title": f"{listing_data.get('housingForm', {}).get('name', '')} {listing_data.get('formattedLivingArea', '')} - {listing_data.get('locationName', '')}",
-                "final_price": listing_data.get("sellingPrice", {}).get("amount") if listing_data.get("sellingPrice") else None,
-                "sale_date_str": sale_date_str,
-                "sale_date": sale_date_datetime,
-                "asking_price": listing_data.get("askingPrice", {}).get("amount") if listing_data.get("askingPrice") else None,
-                "price_change": listing_data.get("priceChange", {}).get("amount") if listing_data.get("priceChange") else None,
-                "price_change_percentage": listing_data.get("priceChangePercentage") if "priceChangePercentage" in listing_data else None,
-                "living_area": listing_data.get("livingArea"),
-                "land_area": listing_data.get("landArea"),
-                "street_address": listing_data.get("streetAddress", ""),
-                "area": listing_data.get("area", ""),
-                "municipality": listing_data.get("municipality", {}).get("__ref", "").split(":")[-1] if listing_data.get("municipality") else "",
-                "running_costs": listing_data.get("runningCosts", {}).get("amount") if listing_data.get("runningCosts") else None,
-                "rooms": listing_data.get("numberOfRooms"),
-                "construction_year": listing_data.get("legacyConstructionYear", ""),
-                "broker_agency": apollo_state.get(listing_data.get("brokerAgency", {}).get("__ref", ""), {}).get("name", "") if listing_data.get("brokerAgency") else ""
-            }
-            
-            return sale_id, original_listing_id, extracted_data, True
+        listing_data = apollo_state[listing_key]
+        original_listing_id = listing_data.get("listingId")
+        sale_date_str = listing_data.get("formattedSoldAt", "")
+        sale_date_datetime = parse_swedish_date(sale_date_str)
+        
+        # Extract using amount values instead of formatted values
+        extracted_data = {
+            "title": f"{listing_data.get('housingForm', {}).get('name', '')} {listing_data.get('formattedLivingArea', '')} - {listing_data.get('locationName', '')}",
+            "final_price": listing_data.get("sellingPrice", {}).get("amount") if listing_data.get("sellingPrice") else None,
+            "sale_date_str": sale_date_str,
+            "sale_date": sale_date_datetime,
+            "asking_price": listing_data.get("askingPrice", {}).get("amount") if listing_data.get("askingPrice") else None,
+            "price_change": listing_data.get("priceChange", {}).get("amount") if listing_data.get("priceChange") else None,
+            "price_change_percentage": listing_data.get("priceChangePercentage") if "priceChangePercentage" in listing_data else None,
+            "living_area": listing_data.get("livingArea"),
+            "land_area": listing_data.get("landArea"),
+            "street_address": listing_data.get("streetAddress", ""),
+            "area": listing_data.get("area", ""),
+            "municipality": listing_data.get("municipality", {}).get("__ref", "").split(":")[-1] if listing_data.get("municipality") else "",
+            "running_costs": listing_data.get("runningCosts", {}).get("amount") if listing_data.get("runningCosts") else None,
+            "rooms": listing_data.get("numberOfRooms"),
+            "construction_year": listing_data.get("legacyConstructionYear", ""),
+            "broker_agency": apollo_state.get(listing_data.get("brokerAgency", {}).get("__ref", ""), {}).get("name", "") if listing_data.get("brokerAgency") else ""
+        }
+        
+        logger.info(f"Successfully extracted JSON data for sold listing {sale_id}")
+        return sale_id, original_listing_id, extracted_data
         
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing JSON data: {e}")
     except Exception as e:
         logger.error(f"Error extracting data from JSON: {e}")
     
-    return None, None, {}, False
+    return None, None, {}
 
 def get_sold_listing_data(url, browser):
     logger.info(f"Fetching data for sold listing: {url}")
@@ -235,78 +216,21 @@ def get_sold_listing_data(url, browser):
         page.goto(url)
         html_content = page.content()
         
-        # Try to extract data from JSON first
-        sale_id, original_listing_id, json_data, success = extract_listing_data_from_json(html_content)
+        # Extract data from JSON
+        sale_id, original_listing_id, json_data = extract_listing_data_from_json(html_content)
         
-        if success and json_data:
+        if json_data:
             json_data["sale_hemnet_id"] = sale_id
             json_data["original_hemnet_id"] = original_listing_id
             json_data["url"] = url
             
-            logger.info(f"Successfully extracted JSON data for sold listing {sale_id}")
+            logger.info(f"Successfully processed data for sold listing {sale_id}")
             page.close()
             return json_data
-        
-        # If JSON extraction fails, fall back to the old method
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        # Extract sale ID and original listing ID
-        sale_id, original_listing_id = extract_hemnet_ids(html_content)
-        
-        if not sale_id:
-            logger.warning(f"Sale ID not found for {url}")
-            # Fall back to extracting ID from URL
-            sale_id = url.split('-')[-1] if '-' in url else None
-        
-        if not original_listing_id:
-            logger.warning(f"Original listing ID not found for {url}")
-        
-        # Try to extract data from JSON-LD if available
-        json_ld_script = soup.find("script", type="application/ld+json")
-        if json_ld_script:
-            try:
-                json_ld = json.loads(json_ld_script.string)
-                title = json_ld.get("name", "")
-                final_price = json_ld.get("offers", {}).get("price", "")
-                sale_date = json_ld.get("dateSold", "")
-            except:
-                title = ""
-                final_price = ""
-                sale_date = ""
         else:
-            # Last resort: Try to find the data in the HTML
-            title = soup.find("h1").text.strip() if soup.find("h1") else ""
-            
-            # Try different selector patterns for the price
-            price_element = (
-                soup.find("span", class_=lambda c: c and "sellingPriceText" in c) or
-                soup.find("div", class_=lambda c: c and "PriceDetails" in c) or
-                soup.find("p", class_=lambda c: c and "Price" in c)
-            )
-            final_price = price_element.text.strip() if price_element else ""
-            
-            # Try different selector patterns for the sale date
-            date_element = (
-                soup.find("p", class_=lambda c: c and "hclText" in c) or
-                soup.find("span", class_=lambda c: c and "SoldDate" in c) or
-                soup.find("div", class_=lambda c: c and "Date" in c)
-            )
-            sale_date_str = date_element.text.strip() if date_element else ""
-            sale_date_datetime = parse_swedish_date(sale_date_str)
-        
-        data = {
-            "title": title,
-            "final_price": final_price,
-            "sale_date_str": sale_date_str,
-            "sale_date": sale_date_datetime,
-            "sale_hemnet_id": sale_id,
-            "original_hemnet_id": original_listing_id,
-            "url": url
-        }
-        
-        logger.debug(f"Extracted data for sold listing {sale_id} with fallback method")
-        page.close()
-        return data
+            logger.warning(f"No data extracted for {url}")
+            page.close()
+            return {}
     except Exception as e:
         logger.error(f"Error processing sold listing {url}: {e}")
         if 'page' in locals() and page:
@@ -332,7 +256,10 @@ def scrape_sold_listings():
                         try:
                             data = get_sold_listing_data("https://www.hemnet.se" + url, browser)
                             if data:
+                                print(data)
                                 store_sold_listing(data)  # Store in database later
+                            else:
+                                logger.warning(f"No data returned for {url}")
                         except Exception as e:
                             logger.error(f"Error processing individual sold listing {url}: {e}")
                             continue
