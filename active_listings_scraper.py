@@ -232,6 +232,7 @@ with sync_playwright() as playwright:
                     try:
                         listingData = get_listing_data(base_url + href)
                         if listingData:
+                            print(json.dumps(listingData, indent=4, ensure_ascii=False))
                             if not listing_exists_in_database(listingData["hemnet_id"]):
                                 save_to_database(listingData)
                             else:
