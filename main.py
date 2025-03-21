@@ -3,7 +3,7 @@ from playwright.sync_api import sync_playwright
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Configure logging
 # Default to current directory for local development, but use /app/logs in Docker
@@ -56,40 +56,46 @@ nulls = set()
 def extract_data(listingData, locations, brokerAgencies, broker):
     try:
         data = dict()
-        data["hemnetId"] = int(listingData["id"])
-        data["streetAddress"] = listingData["streetAddress"]
-        data["postCode"] = listingData["postCode"]
+        data["hemnet_id"] = int(listingData["id"])
+        data["street_address"] = listingData["streetAddress"]
+        data["post_code"] = listingData["postCode"]
         data["tenure"] = listingData["tenure"]["name"]
-        data["numberOfRooms"] = int(listingData["numberOfRooms"]) if listingData["numberOfRooms"] else None
-        data["askingPrice"] = int(listingData["askingPrice"]["amount"]) if listingData["askingPrice"] else None
-        data["squareMeterPrice"] = int(listingData["squareMeterPrice"]["amount"]) if listingData["squareMeterPrice"] else None
+        data["number_of_rooms"] = int(listingData["numberOfRooms"]) if listingData["numberOfRooms"] else None
+        if not listingData["askingPrice"]:
+            return False
+        data["asking_price"] = int(listingData["askingPrice"]["amount"])
+        if listingData["squareMeterPrice"]:
+            data["square_meter_price"] = int(listingData["squareMeterPrice"]["amount"])
+        elif listingData["livingArea"]:
+            data["square_meter_price"] = data["asking_price"] / int(listingData["livingArea"])
+        else:
+            data["square_meter_price"] = None
         data["fee"] = int(listingData["fee"]["amount"]) if listingData["fee"] else None
-        data["yearlyArrendeFee"] = int("".join(listingData["yearlyArrendeFee"]["formatted"].strip("kr").split())) if listingData["yearlyArrendeFee"] else None
-        data["yearlyLeaseholdFee"] = int("".join(listingData["yearlyLeaseholdFee"]["formatted"].strip("kr").split())) if listingData["yearlyLeaseholdFee"] else None
-        data["runningCosts"] = int(listingData["runningCosts"]["amount"]) if listingData["runningCosts"] else None
-        data["legacyConstructionYear"] = int(listingData["legacyConstructionYear"]) if listingData["legacyConstructionYear"] else None
-        data["area"] = listingData["area"]
-        data["livingArea"] = int(listingData["livingArea"]) if listingData["livingArea"] else None
-        data["isForeclosure"] = listingData["isForeclosure"]
-        data["isNewConstruction"] = listingData["isNewConstruction"]
-        data["isProject"] = listingData["isProject"]
-        data["isUpcoming"] = listingData["isUpcoming"]
-        data["supplementalArea"] = int(listingData["supplementalArea"]) if listingData["supplementalArea"] else None
-        data["landArea"] = int(listingData["landArea"]) if listingData["landArea"] else None
-        data["housingForm"] = listingData["housingForm"]["name"]
-        data["relevantAmenities"] = dict()
-        data["energyClassification"] = listingData["energyClassification"]["classification"] if listingData["energyClassification"] else None
+        data["yearly_arrende_fee"] = int("".join(listingData["yearlyArrendeFee"]["formatted"].strip("kr").split())) if listingData["yearlyArrendeFee"] else None
+        data["yearly_leasehold_fee"] = int("".join(listingData["yearlyLeaseholdFee"]["formatted"].strip("kr").split())) if listingData["yearlyLeaseholdFee"] else None
+        data["running_costs"] = int(listingData["runningCosts"]["amount"]) if listingData["runningCosts"] else None
+        data["construction_year"] = int(listingData["legacyConstructionYear"]) if listingData["legacyConstructionYear"] else None
+        data["living_area"] = int(listingData["livingArea"]) if listingData["livingArea"] else None
+        data["is_foreclosure"] = listingData["isForeclosure"]
+        data["is_new_construction"] = listingData["isNewConstruction"]
+        data["is_project"] = listingData["isProject"]
+        data["is_upcoming"] = listingData["isUpcoming"]
+        data["supplemental_area"] = int(listingData["supplementalArea"]) if listingData["supplementalArea"] else None
+        data["land_area"] = int(listingData["landArea"]) if listingData["landArea"] else None
+        data["housing_form"] = listingData["housingForm"]["name"]
+        data["relevant_amenities"] = dict()
+        data["energy_classification"] = listingData["energyClassification"]["classification"] if listingData["energyClassification"] else None
         data["floor"] = int(listingData["formattedFloor"][:2].strip().strip(",")) if listingData["formattedFloor"] else None
-        data["daysSincePublished"] = int(listingData["daysOnHemnet"])
+        data["published_date"] = (datetime.now() - timedelta(days=int(listingData["daysOnHemnet"]))).strftime('%Y-%m-%d')
         data["locations"] = locations
-        data["brokerAgencies"] = brokerAgencies
+        data["broker_agencies"] = brokerAgencies
         data["broker"] = broker
         data["description"] = listingData["description"]
-        data["closestWaterDistanceMeters"] = int(listingData["closestWaterDistanceMeters"]) if listingData["closestWaterDistanceMeters"] else None
-        data["coastlineDistanceMeters"] = int(listingData["coastlineDistanceMeters"]) if listingData["coastlineDistanceMeters"] else None
+        data["closest_water_distance_meters"] = int(listingData["closestWaterDistanceMeters"]) if listingData["closestWaterDistanceMeters"] else None
+        data["coastline_distance_meters"] = int(listingData["coastlineDistanceMeters"]) if listingData["coastlineDistanceMeters"] else None
 
         for amenity in listingData["relevantAmenities"]:
-            data["relevantAmenities"][amenity["title"]] = amenity["isAvailable"]
+            data["relevant_amenities"][amenity["title"]] = amenity["isAvailable"]
 
         for breadcrumb in listingData["breadcrumbs"]:
             id = int(breadcrumb["path"].split("=")[-1])
@@ -193,7 +199,7 @@ with sync_playwright() as playwright:
                 
                 dataToStore = extract_data(listingData, locations, brokerAgencies, broker)
                 if dataToStore:
-                    logger.debug(f"Successfully extracted data for listing {dataToStore.get('hemnetId', 'unknown')}")
+                    logger.debug(f"Successfully extracted data for listing {dataToStore.get('hemnet_id', 'unknown')}")
                     for key, value in dataToStore.items():
                         if value is None:
                             nulls.add(key)
@@ -209,6 +215,14 @@ with sync_playwright() as playwright:
                     page.close()
                 return False
         
+        def save_to_database(data):
+            #TODO: Implement your database saving logic here
+            pass
+
+        def listing_exists_in_database(hemnet_id):
+            #TODO: Implement your logic to check if the listing already exists in the database
+            return False
+
         try:
             for x in range(1, 51):
                 hrefs = get_listing_urls(x)
@@ -217,10 +231,11 @@ with sync_playwright() as playwright:
                 for href in hrefs:
                     try:
                         listingData = get_listing_data(base_url + href)
-                        # if listingData:
-                        #     logger.debug(f"Listing data: {json.dumps(listingData, indent=4, ensure_ascii=False)}")
-                        #TODO: Check if listing already exists in database
-                        #TODO: Save allData to database
+                        if listingData:
+                            if not listing_exists_in_database(listingData["hemnet_id"]):
+                                save_to_database(listingData)
+                            else:
+                                logger.info(f"Listing {listingData['hemnet_id']} already exists in the database")
                     except Exception as e:
                         logger.error(f"Error processing individual listing {href}: {e}")
                         exceptions.append(e)
