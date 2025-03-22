@@ -21,19 +21,21 @@ def setup_logging():
     logger = logging.getLogger('hemnet_scraper')
     logger.setLevel(logging.INFO)
 
-    try:
-        file_handler = logging.FileHandler(log_path)
-        file_handler.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    except Exception as e:
-        print(f"Warning: Could not set up file logging: {e}")
+    # Check if handlers are already added to avoid duplication
+    if not logger.handlers:
+        try:
+            file_handler = logging.FileHandler(log_path)
+            file_handler.setLevel(logging.INFO)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except Exception as e:
+            print(f"Warning: Could not set up file logging: {e}")
 
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
     logger.info(f"Logging initialized. Log file: {log_path}")
     return logger
