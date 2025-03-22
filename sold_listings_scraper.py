@@ -6,6 +6,7 @@ from datetime import datetime
 import locale
 from logging_setup import setup_logging
 from playwright_utils import start_browser, close_browser
+from database_utils import store_sold_listing
 
 logger = setup_logging()
 
@@ -193,9 +194,6 @@ def get_sold_listing_data(url, browser):
             page.close()
         return {}
 
-def store_sold_listing(data):
-    # Placeholder function for future database implementation
-    pass
 
 def scrape_sold_listings():
     playwright, browser = start_browser()
@@ -209,7 +207,13 @@ def scrape_sold_listings():
                 try:
                     data = get_sold_listing_data("https://www.hemnet.se" + url, browser)
                     if data:
-                        store_sold_listing(data)
+                        success, already_exists = store_sold_listing(data)
+                        
+                        # If the sale already exists in the database, stop processing
+                        # since the listings are ordered chronologically
+                        if already_exists:
+                            logger.info("Encountered already processed sale, stopping execution")
+                            return
                     else:
                         logger.warning(f"No data returned for {url}")
                 except Exception as e:

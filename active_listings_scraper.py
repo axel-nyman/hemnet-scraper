@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 from logging_setup import setup_logging
 from playwright_utils import start_browser, close_browser
+from database_utils import listing_exists_in_database, save_to_database  # Import database functions
 
 logger = setup_logging()
 
@@ -166,19 +167,13 @@ def get_listing_data(url, browser):
             page.close()
         return False
 
-def save_to_database(data):
-    #TODO: Implement your database saving logic here
-    pass
-
-def listing_exists_in_database(hemnet_id):
-    #TODO: Implement your logic to check if the listing already exists in the database
-    return False
-
 def main():
     playwright, browser = start_browser()
     base_url = "https://www.hemnet.se"
     
     try:
+        consecutive_existing_count = 0
+        
         for x in range(1, 51):
             hrefs = get_listing_urls(x, browser, base_url)
             logger.info(f"Processing {len(hrefs)} listings from page {x}")
@@ -187,14 +182,30 @@ def main():
                 try:
                     listingData = get_listing_data(base_url + href, browser)
                     if listingData:
-                        if not listing_exists_in_database(listingData["hemnet_id"]):
-                            save_to_database(listingData)
+                        # Check if listing exists using the imported function
+                        hemnet_id = listingData["hemnet_id"]
+                        if not listing_exists_in_database(hemnet_id):
+                            # Save to database using the imported function
+                            success = save_to_database(listingData)
+                            if success:
+                                logger.info(f"Successfully saved listing {hemnet_id} to database")
+                                consecutive_existing_count = 0  # Reset counter on new listing
+                            else:
+                                logger.warning(f"Failed to save listing {hemnet_id} to database")
                         else:
-                            logger.info(f"Listing {listingData['hemnet_id']} already exists in the database")
+                            logger.info(f"Listing {hemnet_id} already exists in the database")
+                            consecutive_existing_count += 1
+                            
+                            # If we've found 3 consecutive existing listings, exit early
+                            if consecutive_existing_count >= 3:
+                                logger.info(f"Found {consecutive_existing_count} consecutive existing listings. Early termination.")
+                                return
                 except Exception as e:
                     logger.error(f"Error processing individual listing {href}: {e}")
                     exceptions.append(e)
+                    consecutive_existing_count = 0  # Reset on error
                     continue
+            
     except Exception as e:
         logger.error(f"Error in main page processing loop: {e}")
         exceptions.append(e)
