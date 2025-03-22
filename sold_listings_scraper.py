@@ -1,13 +1,14 @@
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
-import logging
-import os
 import json
+import os
 import re
 from datetime import datetime
 import locale
+from logging_setup import setup_logging
+from playwright_utils import start_browser, close_browser
 
-# Add this function to parse the Swedish date string
+logger = setup_logging()
+
 def parse_swedish_date(date_str):
     if not date_str:
         return None
@@ -63,51 +64,6 @@ def parse_swedish_date(date_str):
         logger.error(f"Error parsing date '{date_str}': {e}")
     
     return None
-
-
-# Configure logging
-# Default to current directory for local development, but use /app/logs in Docker
-log_directory = os.environ.get('LOG_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs'))
-
-try:
-    os.makedirs(log_directory, exist_ok=True)
-except OSError as e:
-    print(f"Warning: Could not create log directory at {log_directory}: {e}")
-    # Fall back to current working directory if we can't create the specified directory
-    log_directory = os.getcwd()
-    print(f"Falling back to current directory for logs: {log_directory}")
-    os.makedirs(os.path.join(log_directory, 'logs'), exist_ok=True)
-    log_directory = os.path.join(log_directory, 'logs')
-
-log_filename = f"hemnet_scraper_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-log_path = os.path.join(log_directory, log_filename)
-
-# Create logger
-logger = logging.getLogger('hemnet_scraper')
-logger.setLevel(logging.INFO)
-
-# Create file handler
-try:
-    file_handler = logging.FileHandler(log_path)
-    file_handler.setLevel(logging.INFO)
-    
-    # Create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    
-    # Add handler to logger
-    logger.addHandler(file_handler)
-except Exception as e:
-    print(f"Warning: Could not set up file logging: {e}")
-    # We'll still have console logging
-
-# Create console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-logger.info(f"Logging initialized. Log file: {log_path}")
 
 BASE_URL_SOLD = "https://www.hemnet.se/salda/bostader?page="
 
@@ -184,7 +140,7 @@ def extract_listing_data_from_json(html_content):
             "title": f"{listing_data.get('housingForm', {}).get('name', '')} {listing_data.get('formattedLivingArea', '')} - {listing_data.get('locationName', '')}",
             "final_price": listing_data.get("sellingPrice", {}).get("amount") if listing_data.get("sellingPrice") else None,
             "sale_date_str": sale_date_str,
-            "sale_date": sale_date_datetime,
+            "sale_date": sale_date_datetime.strftime('%Y-%m-%d') if sale_date_datetime else None,
             "asking_price": listing_data.get("askingPrice", {}).get("amount") if listing_data.get("askingPrice") else None,
             "price_change": listing_data.get("priceChange", {}).get("amount") if listing_data.get("priceChange") else None,
             "price_change_percentage": listing_data.get("priceChangePercentage") if "priceChangePercentage" in listing_data else None,
@@ -242,35 +198,27 @@ def store_sold_listing(data):
     pass
 
 def scrape_sold_listings():
+    playwright, browser = start_browser()
+    
     try:
-        logger.info("Starting browser session for sold listings")
-        with sync_playwright() as p:
-            browser = p.webkit.launch(headless=True)
+        for page in range(1, 51):
+            urls = get_sold_listing_urls(page, browser)
+            logger.info(f"Processing {len(urls)} sold listings from page {page}")
             
-            try:
-                for page in range(1, 51):  # Scrape up to 50 pages
-                    urls = get_sold_listing_urls(page, browser)
-                    logger.info(f"Processing {len(urls)} sold listings from page {page}")
-                    
-                    for url in urls:
-                        try:
-                            data = get_sold_listing_data("https://www.hemnet.se" + url, browser)
-                            if data:
-                                print(data)
-                                store_sold_listing(data)  # Store in database later
-                            else:
-                                logger.warning(f"No data returned for {url}")
-                        except Exception as e:
-                            logger.error(f"Error processing individual sold listing {url}: {e}")
-                            continue
-            except Exception as e:
-                logger.error(f"Error in main page processing loop: {e}")
-            
-            logger.info("Closing browser session")
-            browser.close()
+            for url in urls:
+                try:
+                    data = get_sold_listing_data("https://www.hemnet.se" + url, browser)
+                    if data:
+                        store_sold_listing(data)
+                    else:
+                        logger.warning(f"No data returned for {url}")
+                except Exception as e:
+                    logger.error(f"Error processing individual sold listing {url}: {e}")
+                    continue
     except Exception as e:
-        logger.critical(f"Critical error in sold listings scraper: {e}")
+        logger.error(f"Error in main page processing loop: {e}")
     finally:
+        close_browser(playwright, browser)
         logger.info("Scraping complete.")
 
 if __name__ == "__main__":
