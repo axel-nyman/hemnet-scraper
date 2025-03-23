@@ -12,10 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code into the container
 COPY src/ ./src
-COPY config/ ./config
-
-# Set environment variables
-ENV LOG_DIR=/app/logs
 
 # Create the logs directory
 RUN mkdir -p /app/logs

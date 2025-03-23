@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  hemnet_scraper:
+    build: .
+    container_name: hemnet_scraper
+    environment:
+      - LOG_DIR=/app/logs
+      - DB_HOST=db
+      - DB_NAME=real_estate
+      - DB_USER=postgres
+      - DB_PASSWORD=yourpassword
+      - DB_PORT=5432
+    depends_on:
+      - db
+    volumes:
+      - ./logs:/app/logs
+    command: ["python", "src/main.py"]
+
+  db:
+    image: postgres:13
+    container_name: hemnet_scraper_db
+    environment:
+      - POSTGRES_DB=real_estate
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=yourpassword
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
