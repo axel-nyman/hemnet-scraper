@@ -2,15 +2,14 @@ import schedule
 import time
 import logging
 import argparse
-import os
 from datetime import datetime
 import traceback
 
 # Import your scraper functions
-from active_listings_scraper import main as scrape_active_listings
-from sold_listings_scraper import scrape_sold_listings
+from scrapers.active_listings_scraper import main as scrape_active_listings
+from scrapers.sold_listings_scraper import scrape_sold_listings
 # Import the logging setup function
-from logging_setup import setup_logging
+from utils.logging_setup import setup_logging
 
 # Use the centralized logging setup
 logger = setup_logging()

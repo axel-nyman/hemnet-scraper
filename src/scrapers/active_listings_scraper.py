@@ -1,10 +1,9 @@
 from bs4 import BeautifulSoup
 import json
-import os
 from datetime import datetime, timedelta
-from logging_setup import setup_logging
-from playwright_utils import start_browser, close_browser
-from database_utils import listing_exists_in_database, save_to_database  # Import database functions
+from utils.logging_setup import setup_logging
+from utils.playwright_utils import start_browser, close_browser
+from utils.database_utils import listing_exists_in_database, save_to_database
 
 logger = setup_logging()
 
@@ -44,6 +43,7 @@ def extract_data(listingData, locations, brokerAgencies, broker):
         data["housing_form"] = listingData["housingForm"]["name"]
         data["relevant_amenities"] = dict()
         data["energy_classification"] = listingData["energyClassification"]["classification"] if listingData["energyClassification"] else None
+        data["housing_cooperative"] = listingData["housingCooperative"] if listingData["housingCooperative"] else None
         data["floor"] = int(listingData["formattedFloor"][:2].strip().strip(",")) if listingData["formattedFloor"] else None
         data["published_date"] = (datetime.now() - timedelta(days=int(listingData["daysOnHemnet"]))).strftime('%Y-%m-%d')
         data["locations"] = locations

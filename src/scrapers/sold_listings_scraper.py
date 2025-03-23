@@ -1,12 +1,10 @@
 from bs4 import BeautifulSoup
 import json
-import os
-import re
 from datetime import datetime
 import locale
-from logging_setup import setup_logging
-from playwright_utils import start_browser, close_browser
-from database_utils import store_sold_listing
+from utils.logging_setup import setup_logging
+from utils.playwright_utils import start_browser, close_browser
+from utils.database_utils import store_sold_listing
 
 logger = setup_logging()
 

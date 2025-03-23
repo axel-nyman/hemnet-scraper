@@ -8,13 +8,19 @@ The Hemnet Scraper is a Python application designed to scrape real estate listin
 
 The project consists of the following main components:
 
-- **scheduler.py**: Manages the scheduling of scraping tasks.
-- **database_utils.py**: Contains utility functions for interacting with the PostgreSQL database.
-- **playwright_utils.py**: Provides functions to start and close the Playwright browser.
-- **logging_setup.py**: Configures logging for the application.
-- **active_listings_scraper.py**: Scrapes active listings from Hemnet.
-- **sold_listings_scraper.py**: Scrapes sold listings from Hemnet.
-- **main.py**: The main entry point for running the scraper manually.
+- **src/**
+  - **main.py**: The main entry point for running the scraper manually.
+  - **scrapers/**
+    - **active_listings_scraper.py**: Scrapes active listings from Hemnet.
+    - **sold_listings_scraper.py**: Scrapes sold listings from Hemnet.
+  - **utils/**
+    - **database_utils.py**: Contains utility functions for interacting with the PostgreSQL database.
+    - **playwright_utils.py**: Provides functions to start and close the Playwright browser.
+    - **logging_setup.py**: Configures logging for the application.
+- **config/**
+  - **.env**: Environment variables for the project.
+- **logs/**: Directory for log files.
+- **tests/**: Directory for unit tests.
 - **.gitignore**: Specifies files and directories to be ignored by Git.
 - **README.md**: Documentation for the project.
 
@@ -41,7 +47,7 @@ The project consists of the following main components:
    ```
 
 4. **Set up environment variables**:
-   Create a `.env` file in the project root and add the following variables:
+   Create a `.env` file in the `config` directory and add the following variables:
    ```sh
    LOG_DIR=<path_to_log_directory>
    ```
@@ -53,5 +59,5 @@ The project consists of the following main components:
 To run the scraper manually, execute the `main.py` script:
 
 ```sh
-python main.py
+python src/main.py
 ```
