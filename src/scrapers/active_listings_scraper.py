@@ -2,8 +2,9 @@ from bs4 import BeautifulSoup
 import json
 from datetime import datetime, timedelta
 from utils.logging_setup import setup_logging
-from utils.playwright_utils import start_browser, close_browser
+from utils.playwright_utils import start_browser, close_browser, create_page_with_user_agent, add_delay
 from utils.database_utils import listing_exists_in_database, save_to_database
+import random
 
 logger = setup_logging()
 
@@ -80,8 +81,18 @@ def get_listing_urls(page_number, browser, base_url):
     logger.info(f"Fetching listings from page {page_number}: {webpage}")        
     
     try:
-        page = browser.new_page()
+        # Use the new function to create a page with random user agent
+        page = create_page_with_user_agent(browser)
+        
+        # Add a random delay before request
+        delay = add_delay(3, 7)
+        logger.debug(f"Waiting {delay:.2f} seconds before requesting page {page_number}")
+        
         page.goto(base_url + webpage)
+        
+        # Add a small delay after page load to ensure JavaScript execution
+        add_delay(1, 2)
+        
         soup = BeautifulSoup(page.content(), 'html.parser')
         result_list = soup.find('div', attrs={'data-testid': 'result-list'})
         
@@ -108,8 +119,18 @@ def get_listing_urls(page_number, browser, base_url):
 def get_listing_data(url, browser):
     logger.info(f"Fetching data for listing: {url}")
     try:
-        page = browser.new_page()
+        # Use the new function to create a page with random user agent
+        page = create_page_with_user_agent(browser)
+        
+        # Add a random delay before request
+        delay = add_delay(2, 5)
+        logger.debug(f"Waiting {delay:.2f} seconds before requesting {url}")
+        
         page.goto(url)
+        
+        # Add a small delay after page load to ensure JavaScript execution
+        add_delay(1, 2)
+        
         soup = BeautifulSoup(page.content(), 'html.parser')
         next_data = soup.find(id='__NEXT_DATA__')
         
@@ -175,6 +196,10 @@ def main():
         consecutive_existing_count = 0
         
         for x in range(1, 51):
+            # Add a longer delay between pages to be respectful
+            delay = add_delay(5, 10)
+            logger.info(f"Waiting {delay:.2f} seconds before processing page {x}")
+            
             hrefs = get_listing_urls(x, browser, base_url)
             logger.info(f"Processing {len(hrefs)} listings from page {x}")
             

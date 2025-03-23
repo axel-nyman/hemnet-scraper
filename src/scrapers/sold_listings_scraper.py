@@ -2,8 +2,9 @@ from bs4 import BeautifulSoup
 import json
 from datetime import datetime
 import locale
+import random
 from utils.logging_setup import setup_logging
-from utils.playwright_utils import start_browser, close_browser
+from utils.playwright_utils import start_browser, close_browser, create_page_with_user_agent, add_delay
 from utils.database_utils import store_sold_listing
 
 logger = setup_logging()
@@ -71,8 +72,18 @@ def get_sold_listing_urls(page_number, browser):
     url = BASE_URL_SOLD + str(page_number)
     logger.info(f"Fetching sold listings from page {page_number}: {url}")
     try:
-        page = browser.new_page()
+        # Use the new function to create a page with random user agent
+        page = create_page_with_user_agent(browser)
+        
+        # Add a random delay before request
+        delay = add_delay(3, 7)
+        logger.debug(f"Waiting {delay:.2f} seconds before requesting page {page_number}")
+        
         page.goto(url)
+        
+        # Add a small delay after page load to ensure JavaScript execution
+        add_delay(1, 2)
+        
         soup = BeautifulSoup(page.content(), 'html.parser')
         
         result_list = soup.find('div', attrs={'data-testid': 'result-list'})
@@ -167,8 +178,18 @@ def extract_listing_data_from_json(html_content):
 def get_sold_listing_data(url, browser):
     logger.info(f"Fetching data for sold listing: {url}")
     try:
-        page = browser.new_page()
+        # Use the new function to create a page with random user agent
+        page = create_page_with_user_agent(browser)
+        
+        # Add a random delay before request
+        delay = add_delay(2, 5)
+        logger.debug(f"Waiting {delay:.2f} seconds before requesting {url}")
+        
         page.goto(url)
+        
+        # Add a small delay after page load to ensure JavaScript execution
+        add_delay(1, 2)
+        
         html_content = page.content()
         
         # Extract data from JSON
@@ -198,6 +219,10 @@ def scrape_sold_listings():
     
     try:
         for page in range(1, 51):
+            # Add a longer delay between pages to be respectful
+            delay = add_delay(5, 10)
+            logger.info(f"Waiting {delay:.2f} seconds before processing page {page}")
+            
             urls = get_sold_listing_urls(page, browser)
             logger.info(f"Processing {len(urls)} sold listings from page {page}")
             
