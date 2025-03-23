@@ -2,7 +2,9 @@
 -- DROP SCHEMA IF EXISTS real_estate CASCADE;
 
 -- Create schema
--- CREATE SCHEMA real_estate;
+CREATE SCHEMA real_estate;
+
+CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- Create lookup tables first
 CREATE TABLE "housing_form_types" (
@@ -324,7 +326,7 @@ SELECT
     tt.name AS tenure_name,
     l.housing_cooperative_id,
     hc.name AS housing_cooperative_name,
-    EXTRACT(DAY FROM (ps.sale_date - l.published_date)) AS days_on_market
+    (ps.sale_date - l.published_date) AS days_on_market
 FROM 
     "listings" l
 JOIN 
@@ -374,7 +376,7 @@ SELECT
     COUNT(DISTINCT ps.sale_id) AS total_sales,
     ROUND(AVG(ps.final_price), 2) AS avg_final_price,
     ROUND(AVG(ps.price_change_percentage), 2) AS avg_price_change_percentage,
-    ROUND(AVG(EXTRACT(DAY FROM (ps.sale_date - l.published_date))), 1) AS avg_days_on_market,
+    ROUND(AVG(ps.sale_date - l.published_date), 1) AS avg_days_on_market,
     ROUND(AVG(CASE WHEN l.living_area > 0 THEN ps.final_price / l.living_area ELSE NULL END), 2) AS avg_price_per_sqm
 FROM 
     "locations" loc
@@ -402,7 +404,7 @@ SELECT
     ROUND(AVG(CASE WHEN l.living_area > 0 THEN ps.final_price / l.living_area ELSE NULL END), 2) AS avg_sqm_price_final,
     ROUND(AVG(l.fee), 2) AS avg_monthly_fee,
     ROUND(AVG(ps.price_change_percentage), 2) AS avg_price_change_percentage,
-    ROUND(AVG(EXTRACT(DAY FROM (ps.sale_date - l.published_date))), 1) AS avg_days_on_market
+    ROUND(AVG(ps.sale_date - l.published_date), 1) AS avg_days_on_market
 FROM
     "housing_cooperatives" hc
 JOIN
