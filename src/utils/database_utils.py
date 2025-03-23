@@ -130,6 +130,49 @@ def get_or_create_agency(conn, agency_data):
     finally:
         cursor.close()
 
+def get_or_create_housing_cooperative(conn, housing_cooperative_data):
+    """
+    Get or create a housing cooperative record in the database.
+    Returns the housing_cooperative_id.
+    
+    Args:
+        conn: Database connection
+        housing_cooperative_data: Dictionary containing housing cooperative data
+        
+    Returns:
+        The housing_cooperative_id if successful, None otherwise
+    """
+    cursor = conn.cursor()
+    try:
+        # Extract data
+        name = housing_cooperative_data.get("name")
+        
+        if not name:
+            logger.error("Missing required housing cooperative data: name")
+            return None
+        
+        # Check if the housing cooperative exists
+        cursor.execute("SELECT housing_cooperative_id FROM housing_cooperatives WHERE name = %s", (name,))
+        result = cursor.fetchone()
+        
+        if result:
+            return result[0]
+        
+        # Create new housing cooperative
+        cursor.execute(
+            "INSERT INTO housing_cooperatives (name) VALUES (%s) RETURNING housing_cooperative_id",
+            (name,)
+        )
+        housing_cooperative_id = cursor.fetchone()[0]
+        conn.commit()
+        return housing_cooperative_id
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error in get_or_create_housing_cooperative: {e}")
+        raise
+    finally:
+        cursor.close()
+
 def create_broker_agency_relationship(conn, broker_id, agency_id):
     """
     Create a relationship between broker and agency if it doesn't exist.
@@ -301,6 +344,11 @@ def save_to_database(data):
                 data["energy_classification"]
             )
         
+        # Process housing cooperative if it exists
+        housing_cooperative_id = None
+        if data.get("housing_cooperative") and data["housing_cooperative"].get("name"):
+            housing_cooperative_id = get_or_create_housing_cooperative(conn, data["housing_cooperative"])
+        
         # 2. Get or create broker
         broker_id = get_or_create_broker(conn, data["broker"])
         
@@ -313,12 +361,12 @@ def save_to_database(data):
                     asking_price, squaremeter_price, fee, yearly_arrendee_fee, yearly_leasehold_fee,
                     running_costs, construction_year, living_area, is_foreclosure, is_new_construction,
                     is_project, is_upcoming, supplemental_area, land_area, housing_form_id,
-                    energy_classification_id, floor, published_date, broker_id,
+                    housing_cooperative_id, energy_classification_id, floor, published_date, broker_id,
                     closest_water_distance_meters, coastline_distance_meters, description,
                     latitude, longitude
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 ) RETURNING listing_id
             """, (
                 data["hemnet_id"],
@@ -342,6 +390,7 @@ def save_to_database(data):
                 data.get("supplemental_area"),
                 data.get("land_area"),
                 housing_form_id,
+                housing_cooperative_id,
                 energy_classification_id,
                 data.get("floor"),
                 data["published_date"],
