@@ -1,23 +1,48 @@
 import psycopg2
 import logging
+import os
+import time
 
 logger = logging.getLogger(__name__)
 
+
 def get_db_connection():
     """
-    Create and return a connection to the PostgreSQL database.
+    Create and return a connection to the PostgreSQL database with retry logic for containers.
     """
-    try:
-        conn = psycopg2.connect(
-            host="localhost",
-            database="real_estate",
-            user="postgres",
-            password="your_password"  # Replace with your actual password or use environment variables
-        )
-        return conn
-    except Exception as e:
-        logger.error(f"Database connection error: {e}")
-        raise
+    max_retries = 5
+    retry_delay = 2  # seconds
+    
+    # Get connection parameters from environment variables with fallbacks
+    db_host = os.environ.get("DB_HOST", "db")  # Use 'db' as default (common service name)
+    db_name = os.environ.get("DB_NAME", "real_estate")
+    db_user = os.environ.get("DB_USER", "postgres")
+    db_password = os.environ.get("DB_PASSWORD", "")
+    db_port = os.environ.get("DB_PORT", "5432")
+    
+    # Retry logic for container startup order
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            conn = psycopg2.connect(
+                host=db_host,
+                database=db_name,
+                user=db_user,
+                password=db_password,
+                port=db_port
+            )
+            return conn
+        except psycopg2.OperationalError as e:
+            retry_count += 1
+            if retry_count < max_retries:
+                logger.warning(f"Database connection attempt {retry_count} failed. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"Database connection failed after {max_retries} attempts: {e}")
+                raise
+        except Exception as e:
+            logger.error(f"Database connection error: {e}")
+            raise
 
 def check_or_create_lookup_value(conn, table, id_column, name_column, value):
     """

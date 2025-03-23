@@ -10,7 +10,16 @@ def setup_logging():
         return logger
 
     # Configure logging
-    log_directory = os.environ.get('LOG_DIR', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', 'logs'))
+    # For containers, use LOG_DIR env var
+    # For local testing, fallback to a directory relative to the script
+    if 'LOG_DIR' in os.environ:
+        # Container environment or explicitly set
+        log_directory = os.environ['LOG_DIR']
+    else:
+        # Local testing fallback - create logs in parent directory structure
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = os.path.dirname(os.path.dirname(script_dir))  # Go up two levels
+        log_directory = os.path.join(base_dir, 'logs')
 
     try:
         os.makedirs(log_directory, exist_ok=True)
