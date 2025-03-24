@@ -30,19 +30,6 @@ The project consists of the following main components:
 - Docker
 - Docker Compose
 
-### Configuration
-
-Create a `.env` file in the `config` directory with the following variables:
-
-```sh
-LOG_DIR=/app/logs
-DB_HOST=postgres
-DB_NAME=real_estate
-DB_USER=postgres
-DB_PASSWORD=yourpassword
-DB_PORT=5432
-```
-
 ### Docker Services
 
 The application runs the following containerized services:
@@ -57,12 +44,6 @@ The application runs the following containerized services:
 
 ```sh
 docker-compose up -d
-```
-
-### Running the Scraper
-
-```sh
-docker-compose up hemnet_scraper
 ```
 
 ### Accessing Services
