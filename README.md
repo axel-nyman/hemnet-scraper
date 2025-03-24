@@ -2,14 +2,14 @@
 
 ## Overview
 
-The Hemnet Scraper is a Python application designed to scrape real estate listings from the Hemnet website. It collects data on both active and sold listings and stores this information in a PostgreSQL database. The application uses Playwright for browser automation and BeautifulSoup for HTML parsing.
+The Hemnet Scraper is a containerized Python application designed to scrape real estate listings from the Hemnet website. It collects data on both active and sold listings and stores this information in a PostgreSQL database. The application uses Playwright for browser automation and BeautifulSoup for HTML parsing.
 
 ## Project Structure
 
 The project consists of the following main components:
 
 - **src/**
-  - **main.py**: The main entry point for running the scraper manually.
+  - **main.py**: The main entry point for running the scraper.
   - **scrapers/**
     - **active_listings_scraper.py**: Scrapes active listings from Hemnet.
     - **sold_listings_scraper.py**: Scrapes sold listings from Hemnet.
@@ -21,43 +21,73 @@ The project consists of the following main components:
   - **.env**: Environment variables for the project.
 - **logs/**: Directory for log files.
 - **tests/**: Directory for unit tests.
+- **notebooks/**: Directory for Jupyter notebooks.
 - **.gitignore**: Specifies files and directories to be ignored by Git.
 - **README.md**: Documentation for the project.
+- **docker-compose.yaml**: Docker configuration for running the application.
 
-## Installation
+## Setup and Installation
 
-1. **Clone the repository**:
+### Prerequisites
 
-   ```sh
-   git clone <repository_url>
-   cd hemnet-scraper
-   ```
+- Docker
+- Docker Compose
 
-2. **Create a virtual environment**:
+### Configuration
 
-   ```sh
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
+Create a `.env` file in the `config` directory with the following variables:
 
-3. **Install dependencies**:
+```sh
+LOG_DIR=/app/logs
+DB_HOST=postgres
+DB_NAME=real_estate
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DB_PORT=5432
+```
 
-   ```sh
-   pip install -r requirements.txt
-   ```
+### Docker Services
 
-4. **Set up environment variables**:
-   Create a `.env` file in the `config` directory and add the following variables:
-   ```sh
-   LOG_DIR=<path_to_log_directory>
-   ```
+The application runs the following containerized services:
+
+- **hemnet_scraper**: Main scraping application
+- **postgres**: PostgreSQL database with PostGIS extension
+- **jupyter**: Jupyter Lab for data analysis
 
 ## Usage
 
-### Running the Scraper
-
-To run the scraper manually, execute the `main.py` script:
+### Starting the Services
 
 ```sh
-python src/main.py
+docker-compose up -d
+```
+
+### Running the Scraper
+
+```sh
+docker-compose up hemnet_scraper
+```
+
+### Accessing Services
+
+- **Jupyter Lab**: `http://localhost:8888`
+- **PostgreSQL**:
+  - Host: `localhost`
+  - Port: `5432`
+  - Database: `real_estate`
+  - Username: `postgres`
+  - Password: `yourpassword`
+
+## Monitoring
+
+- Logs are available in the `logs` directory
+- Container logs can be viewed using:
+  ```sh
+  docker-compose logs -f [service_name]
+  ```
+
+## Stopping the Services
+
+```sh
+docker-compose down
 ```
