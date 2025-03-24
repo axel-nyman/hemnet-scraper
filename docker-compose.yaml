@@ -30,5 +30,29 @@ services:
     ports:
       - "5432:5432"
 
+  jupyter:
+    image: jupyter/base-notebook
+    container_name: hemnet_jupyter
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=''
+      - JUPYTER_CONFIG_DIR=/home/jovyan/.jupyter
+      - PYTHONPATH=/home/jovyan/work
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - jupyter_config:/home/jovyan/.jupyter
+    depends_on:
+      - db
+    command: >
+      bash -c "
+        pip install --no-cache-dir psycopg2-binary pandas &&
+        mkdir -p /home/jovyan/.jupyter &&
+        echo 'c.ServerApp.token = \"\"' > /home/jovyan/.jupyter/jupyter_server_config.py &&
+        echo 'c.ServerApp.notebook_dir = \"/home/jovyan/work\"' >> /home/jovyan/.jupyter/jupyter_server_config.py &&
+        start-notebook.sh"
+
 volumes:
   db_data:
+  jupyter_config:
