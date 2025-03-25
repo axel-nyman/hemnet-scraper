@@ -1,9 +1,10 @@
-# Use the official Python image from the Docker Hub
-FROM python:3.9-slim
+# Use buildx for multi-architecture support
+FROM --platform=$BUILDPLATFORM python:3.9-slim AS builder
 
-# Set the working directory in the container
+# Set work directory
 WORKDIR /app
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libnss3 \
@@ -28,21 +29,19 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container
+# Copy requirements and install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Playwright
 RUN playwright install webkit
 RUN playwright install-deps webkit
 
-# Copy the rest of the application code into the container
+# Copy application code
 COPY src/ ./src
 
-# Create the logs directory
+# Create logs directory
 RUN mkdir -p /app/logs
 
-# Expose any ports the app is expected to run on
-EXPOSE 8000
-
-# Command to run the application
+# Set the default command
 CMD ["python", "src/main.py"]

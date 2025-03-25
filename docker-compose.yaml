@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   hemnet_scraper:
-    build: .
+    image: axelnyman/hemnet-scraper:latest
     container_name: hemnet_scraper
     environment:
       - LOG_DIR=/app/logs
