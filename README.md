@@ -30,13 +30,35 @@ The project consists of the following main components:
 - Docker
 - Docker Compose
 
+### Environment Setup
+
+1. Create a `.env` file in the project root:
+
+```bash
+cp .env.template .env
+```
+
+2. Edit the `.env` file with your secure credentials:
+
+```plaintext
+DB_USER=postgres
+DB_PASSWORD=your_secure_password_here
+JUPYTER_TOKEN=your_secure_token_here
+```
+
+3. Set proper file permissions:
+
+```bash
+chmod 600 .env
+```
+
 ### Docker Services
 
 The application runs the following containerized services:
 
 - **hemnet_scraper**: Main scraping application
 - **postgres**: PostgreSQL database with PostGIS extension
-- **jupyter**: Jupyter Lab for data analysis
+- **jupyter**: Jupyter Lab for data analysis (password protected)
 
 ## Usage
 
@@ -48,13 +70,15 @@ docker-compose up -d
 
 ### Accessing Services
 
-- **Jupyter Lab**: `http://localhost:8888`
+- **Jupyter Lab**:
+  - URL: `http://localhost:8888`
+  - Authentication: Required (token specified in .env)
 - **PostgreSQL**:
   - Host: `localhost`
   - Port: `5432`
   - Database: `real_estate`
-  - Username: `postgres`
-  - Password: `yourpassword`
+  - Username: from .env (DB_USER)
+  - Password: from .env (DB_PASSWORD)
 
 ## Monitoring
 

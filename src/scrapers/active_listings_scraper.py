@@ -203,6 +203,8 @@ def main():
             hrefs = get_listing_urls(x, browser, base_url)
             logger.info(f"Processing {len(hrefs)} listings from page {x}")
             
+            page_consecutive_count = 0  # Track consecutive listings for this page
+            
             for href in hrefs:
                 try:
                     listingData = get_listing_data(base_url + href, browser)
@@ -215,21 +217,29 @@ def main():
                             if success:
                                 logger.info(f"Successfully saved listing {hemnet_id} to database")
                                 consecutive_existing_count = 0  # Reset counter on new listing
+                                page_consecutive_count = 0
                             else:
                                 logger.warning(f"Failed to save listing {hemnet_id} to database")
                         else:
                             logger.info(f"Listing {hemnet_id} already exists in the database")
                             consecutive_existing_count += 1
+                            page_consecutive_count += 1
                             
-                            # If we've found 3 consecutive existing listings, exit early
-                            if consecutive_existing_count >= 3:
+                            # If we've found 50 consecutive existing listings, exit early
+                            if consecutive_existing_count >= 50:
                                 logger.info(f"Found {consecutive_existing_count} consecutive existing listings. Early termination.")
                                 return
                 except Exception as e:
                     logger.error(f"Error processing individual listing {href}: {e}")
                     exceptions.append(e)
                     consecutive_existing_count = 0  # Reset on error
+                    page_consecutive_count = 0
                     continue
+            
+            # If an entire page of listings already exist, exit
+            if page_consecutive_count == len(hrefs):
+                logger.info(f"Entire page {x} contains existing listings. Stopping execution.")
+                return
             
     except Exception as e:
         logger.error(f"Error in main page processing loop: {e}")
@@ -238,6 +248,6 @@ def main():
         close_browser(playwright, browser)
         logger.info(f"Script completed. Encountered {len(exceptions)} exceptions")
         logger.info(f"Fields with null values: {nulls}")
-
+        
 if __name__ == "__main__":
     main()

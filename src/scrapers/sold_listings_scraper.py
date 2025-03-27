@@ -214,10 +214,12 @@ def get_sold_listing_data(url, browser):
         return {}
 
 
-def scrape_sold_listings():
+def main():
     playwright, browser = start_browser()
     
     try:
+        consecutive_existing_count = 0
+        
         for page in range(1, 51):
             # Add a longer delay between pages to be respectful
             delay = add_delay(5, 10)
@@ -226,22 +228,38 @@ def scrape_sold_listings():
             urls = get_sold_listing_urls(page, browser)
             logger.info(f"Processing {len(urls)} sold listings from page {page}")
             
+            page_consecutive_count = 0  # Track consecutive listings for this page
+            
             for url in urls:
                 try:
                     data = get_sold_listing_data("https://www.hemnet.se" + url, browser)
                     if data:
                         success, already_exists = store_sold_listing(data)
                         
-                        # If the sale already exists in the database, stop processing
-                        # since the listings are ordered chronologically
-                        if already_exists:
-                            logger.info("Encountered already processed sale, stopping execution")
+                        if not already_exists:
+                            # Reset counters if a new listing is found
+                            consecutive_existing_count = 0
+                            page_consecutive_count = 0
+                        else:
+                            consecutive_existing_count += 1
+                            page_consecutive_count += 1
+                        
+                        # If 50 consecutive existing sales are found, stop
+                        if consecutive_existing_count >= 50:
+                            logger.info("Found 50 consecutive existing sales, stopping execution")
                             return
                     else:
                         logger.warning(f"No data returned for {url}")
                 except Exception as e:
                     logger.error(f"Error processing individual sold listing {url}: {e}")
+                    consecutive_existing_count = 0
+                    page_consecutive_count = 0
                     continue
+            
+            # If an entire page of listings already exist, exit
+            if page_consecutive_count == len(urls):
+                logger.info(f"Entire page {page} contains existing listings. Stopping execution.")
+                return
     except Exception as e:
         logger.error(f"Error in main page processing loop: {e}")
     finally:
@@ -249,4 +267,4 @@ def scrape_sold_listings():
         logger.info("Scraping complete.")
 
 if __name__ == "__main__":
-    scrape_sold_listings()
+    main()

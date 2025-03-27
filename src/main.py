@@ -7,7 +7,7 @@ import traceback
 
 # Import your scraper functions
 from scrapers.active_listings_scraper import main as scrape_active_listings
-from scrapers.sold_listings_scraper import scrape_sold_listings
+from scrapers.sold_listings_scraper import main as scrape_sold_listings
 # Import the logging setup function
 from utils.logging_setup import setup_logging
 

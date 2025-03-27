@@ -9,8 +9,8 @@ services:
       - LOG_DIR=/app/logs
       - DB_HOST=db
       - DB_NAME=real_estate
-      - DB_USER=postgres
-      - DB_PASSWORD=yourpassword
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=5432
     depends_on:
       - db
@@ -24,8 +24,8 @@ services:
     container_name: hemnet_scraper_db
     environment:
       - POSTGRES_DB=real_estate
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=yourpassword
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./db:/docker-entrypoint-initdb.d
@@ -33,12 +33,12 @@ services:
       - "5432:5432"
 
   jupyter:
-    image: jupyter/base-notebook:arm64
+    image: jupyter/base-notebook:latest
     platform: linux/arm64
     container_name: hemnet_jupyter
     environment:
       - JUPYTER_ENABLE_LAB=yes
-      - JUPYTER_TOKEN=''
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
       - JUPYTER_CONFIG_DIR=/home/jovyan/.jupyter
       - PYTHONPATH=/home/jovyan/work
     ports:
