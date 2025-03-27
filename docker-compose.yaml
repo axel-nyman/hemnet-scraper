@@ -19,7 +19,7 @@ services:
     command: ["python", "src/main.py", "--run-now"]
 
   db:
-    image: postgis/postgis:13-3.1
+    image: postgis/postgis:13-3.5
     platform: linux/arm64
     container_name: hemnet_scraper_db
     environment:
