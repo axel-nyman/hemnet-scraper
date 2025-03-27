@@ -4,8 +4,6 @@
 -- Create schema
 CREATE SCHEMA real_estate;
 
-CREATE EXTENSION IF NOT EXISTS postgis;
-
 -- Create lookup tables first
 CREATE TABLE "housing_form_types" (
     "housing_form_id" SERIAL PRIMARY KEY,
@@ -245,9 +243,10 @@ CREATE INDEX "idx_listings_living_area" ON "listings" ("living_area");
 CREATE INDEX "idx_listings_postcode" ON "listings" ("postcode");
 CREATE INDEX "idx_listings_published_date" ON "listings" ("published_date");
 CREATE INDEX "idx_listings_status" ON "listings" ("status");
-CREATE INDEX "idx_listings_location" ON "listings" USING GIST (
-    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
-) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
+
+-- Standard indexes for location data
+CREATE INDEX "idx_listings_location" ON "listings" ("longitude", "latitude")
+WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
 
 -- Create indexes for the property_sales table
 CREATE INDEX "idx_property_sales_listing_id" ON "property_sales" ("listing_id");
@@ -256,10 +255,9 @@ CREATE INDEX "idx_property_sales_sale_date" ON "property_sales" ("sale_date");
 CREATE INDEX "idx_property_sales_final_price" ON "property_sales" ("final_price");
 CREATE INDEX "idx_property_sales_broker_agency" ON "property_sales" ("broker_agency");
 
--- Create indexes for the locations table
-CREATE INDEX "idx_locations_location" ON "locations" USING GIST (
-    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
-) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
+-- Standard index for locations
+CREATE INDEX "idx_locations_location" ON "locations" ("longitude", "latitude")
+WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
 
 -- Create index for housing_cooperatives
 CREATE INDEX "idx_housing_cooperatives_name" ON "housing_cooperatives" ("name");
