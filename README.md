@@ -38,19 +38,41 @@ The project consists of the following main components:
 cp .env.template .env
 ```
 
-2. Edit the `.env` file with your secure credentials:
+2. Edit the `.env` file with your credentials and system-specific values:
 
-```plaintext
+```properties
 DB_USER=postgres
 DB_PASSWORD=your_secure_password_here
 JUPYTER_TOKEN=your_secure_token_here
+UID=your_uid  # Will be different based on your system
+GID=your_gid  # Will be different based on your system
 ```
+
+To get your system's UID and GID values, run these commands in your terminal:
+
+```bash
+echo "My UID is: $(id -u)"
+echo "My GID is: $(id -g)"
+```
+
+Common values:
+
+- macOS: typically UID=501, GID=20
+- Linux: typically UID=1000, GID=1000
 
 3. Set proper file permissions:
 
 ```bash
 chmod 600 .env
 ```
+
+4. Verify your `.env` file:
+
+```bash
+cat .env
+```
+
+The output should show all five required environment variables properly set.
 
 ### Docker Services
 
