@@ -34,13 +34,16 @@ services:
     image: jupyter/base-notebook:latest
     platform: linux/arm64
     container_name: hemnet_jupyter
+    user: root
     environment:
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_TOKEN=${JUPYTER_TOKEN}
       - JUPYTER_CONFIG_DIR=/home/jovyan/.jupyter
       - PYTHONPATH=/home/jovyan/work
+      - NB_USER=jovyan
       - NB_UID=${UID}
       - NB_GID=${GID}
+      - CHOWN_HOME=yes
     ports:
       - "8888:8888"
     volumes:
