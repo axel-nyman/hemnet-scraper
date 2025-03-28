@@ -1,10 +1,10 @@
-from bs4 import BeautifulSoup
+import gc
+from bs4 import BeautifulSoup, SoupStrainer
 import json
 from datetime import datetime, timedelta
 from utils.logging_setup import setup_logging
-from utils.playwright_utils import start_browser, close_browser, create_page_with_user_agent, add_delay
+from utils.playwright_utils import browser_context, page_context
 from utils.database_utils import listing_exists_in_database, save_to_database
-import random
 
 logger = setup_logging()
 
@@ -75,179 +75,118 @@ def extract_data(listingData, locations, brokerAgencies, broker):
         return False
 
 def get_listing_urls(page_number, browser, base_url):
-    listings = list()
-    webpage = "/bostader"
-    webpage = "/bostader?page=" + str(page_number) if page_number > 1 else webpage
+    webpage = f"/bostader{'?page=' + str(page_number) if page_number > 1 else ''}"
     logger.info(f"Fetching listings from page {page_number}: {webpage}")        
     
-    try:
-        # Use the new function to create a page with random user agent
-        page = create_page_with_user_agent(browser)
+    with page_context(browser) as page:
+        page.goto(base_url + webpage, wait_until="domcontentloaded")
+        content = page.content()
+        # Parse only the needed elements instead of the entire page
+        soup = BeautifulSoup(content, 'html.parser', parse_only=SoupStrainer('div', attrs={'data-testid': 'result-list'}))
         
-        # Add a random delay before request
-        delay = add_delay(3, 7)
-        logger.debug(f"Waiting {delay:.2f} seconds before requesting page {page_number}")
-        
-        page.goto(base_url + webpage)
-        
-        # Add a small delay after page load to ensure JavaScript execution
-        add_delay(1, 2)
-        
-        soup = BeautifulSoup(page.content(), 'html.parser')
-        result_list = soup.find('div', attrs={'data-testid': 'result-list'})
-        
-        if not result_list:
+        if not soup:
             logger.warning(f"Result list not found on page {page_number}")
-            page.close()
-            return listings
-        
-        for link in result_list.find_all('a'):
-            href = link.get('href')
-            if href and href.startswith('/bostad'):
-                listings.append(href)
-        
-        logger.info(f"Found {len(listings)} listings on page {page_number}")
-        page.close()
-        return listings
-    except Exception as e:
-        logger.error(f"Error fetching listing URLs from page {page_number}: {e}")
-        exceptions.append(e)
-        if 'page' in locals() and page:
-            page.close()
-        return []
+            return
+
+        for link in soup.find_all('a', href=True):
+            if link['href'].startswith('/bostad'):
+                yield link['href']
 
 def get_listing_data(url, browser):
-    logger.info(f"Fetching data for listing: {url}")
-    try:
-        # Use the new function to create a page with random user agent
-        page = create_page_with_user_agent(browser)
-        
-        # Add a random delay before request
-        delay = add_delay(2, 5)
-        logger.debug(f"Waiting {delay:.2f} seconds before requesting {url}")
-        
-        page.goto(url)
-        
-        # Add a small delay after page load to ensure JavaScript execution
-        add_delay(1, 2)
-        
-        soup = BeautifulSoup(page.content(), 'html.parser')
-        next_data = soup.find(id='__NEXT_DATA__')
-        
-        if not next_data:
-            logger.warning(f"__NEXT_DATA__ not found for listing: {url}")
-            page.close()
-            return False
-        
-        temp = json.loads(next_data.text)
-        
+    with page_context(browser) as page:
         try:
-            allData = temp["props"]["pageProps"]["__APOLLO_STATE__"]
-        except KeyError as e:
-            logger.error(f"KeyError accessing APOLLO_STATE: {e}")
+            page.goto(url, wait_until="domcontentloaded")
+            # Parse only the needed element
+            soup = BeautifulSoup(page.content(), 'html.parser', 
+                               parse_only=SoupStrainer('script', id='__NEXT_DATA__'))
+            
+            next_data = soup.find()
+            if not next_data:
+                logger.warning(f"__NEXT_DATA__ not found for listing: {url}")
+                return False
+
+            data = json.loads(next_data.string)
+            apollo_state = data["props"]["pageProps"]["__APOLLO_STATE__"]
+            
+            # Process data in smaller chunks
+            locations = [
+                {"hemnetId": int(v["id"]), "name": v["fullName"]}
+                for k, v in apollo_state.items()
+                if k.startswith("Location:")
+            ]
+            
+            brokerAgencies = [
+                {"hemnetId": int(v["id"]), "name": v["name"]}
+                for k, v in apollo_state.items()
+                if k.startswith("BrokerAgency:")
+            ]
+            
+            broker = next(
+                ({"hemnetId": int(v["id"]), "name": v["name"]}
+                for k, v in apollo_state.items()
+                if k.startswith("Broker:")),
+                {}
+            )
+            
+            listingData = next(
+                (v for k, v in apollo_state.items()
+                if k.startswith(("ActivePropertyListing:", "ProjectUnit:", "DeactivatedBeforeOpenHousePropertyListing:"))),
+                None
+            )
+
+            if not listingData:
+                logger.warning(f"No listing data found for {url}")
+                return False
+
+            # Clear variables explicitly
+            del data
+            del apollo_state
+            del soup
+            
+            return extract_data(listingData, locations, brokerAgencies, broker)
+            
+        except Exception as e:
+            logger.error(f"Error processing listing {url}: {e}")
             exceptions.append(e)
-            page.close()
             return False
-        
-        locations = list()
-        brokerAgencies = list()
-        broker = dict()
-        listingData = dict()
-        
-        for key in allData.keys():
-            if key.startswith("Location:"):
-                locations.append({"hemnetId": int(allData[key]["id"]), "name": allData[key]["fullName"]})
-            elif key.startswith("BrokerAgency:"):
-                brokerAgencies.append({"hemnetId": int(allData[key]["id"]), "name": allData[key]["name"]})
-            elif key.startswith("Broker:"):
-                broker["hemnetId"] = int(allData[key]["id"])
-                broker["name"] = allData[key]["name"]
-            elif key.startswith("ActivePropertyListing:") or key.startswith("ProjectUnit:") or key.startswith("DeactivatedBeforeOpenHousePropertyListing:"):
-                listingData = allData[key]
-        
-        if not listingData:
-            logger.warning(f"No listing data found for {url}")
-            page.close()
-            return False
-        
-        dataToStore = extract_data(listingData, locations, brokerAgencies, broker)
-        if dataToStore:
-            logger.debug(f"Successfully extracted data for listing {dataToStore.get('hemnet_id', 'unknown')}")
-            for key, value in dataToStore.items():
-                if value is None:
-                    nulls.add(key)
-        else:
-            logger.warning(f"Failed to extract data for listing: {url}")
-        
-        page.close()
-        return dataToStore
-    except Exception as e:
-        logger.error(f"Error processing listing {url}: {e}")
-        exceptions.append(e)
-        if 'page' in locals() and page:
-            page.close()
-        return False
 
 def main():
-    playwright, browser = start_browser()
-    base_url = "https://www.hemnet.se"
-    
-    try:
+    with browser_context() as (playwright, browser):
+        base_url = "https://www.hemnet.se"
         consecutive_existing_count = 0
         
-        for x in range(1, 51):
-            # Add a longer delay between pages to be respectful
-            delay = add_delay(5, 10)
-            logger.info(f"Waiting {delay:.2f} seconds before processing page {x}")
-            
-            hrefs = get_listing_urls(x, browser, base_url)
-            logger.info(f"Processing {len(hrefs)} listings from page {x}")
-            
-            page_consecutive_count = 0  # Track consecutive listings for this page
-            
-            for href in hrefs:
-                try:
-                    listingData = get_listing_data(base_url + href, browser)
-                    if listingData:
-                        # Check if listing exists using the imported function
-                        hemnet_id = listingData["hemnet_id"]
-                        if not listing_exists_in_database(hemnet_id):
-                            # Save to database using the imported function
-                            success = save_to_database(listingData)
-                            if success:
-                                logger.info(f"Successfully saved listing {hemnet_id} to database")
-                                consecutive_existing_count = 0  # Reset counter on new listing
-                                page_consecutive_count = 0
+        try:
+            for x in range(1, 51):
+                for href in get_listing_urls(x, browser, base_url):
+                    try:
+                        listingData = get_listing_data(base_url + href, browser)
+                        if listingData:
+                            hemnet_id = listingData["hemnet_id"]
+                            if not listing_exists_in_database(hemnet_id):
+                                if save_to_database(listingData):
+                                    logger.info(f"Successfully saved listing {hemnet_id}")
+                                    consecutive_existing_count = 0
+                                else:
+                                    logger.warning(f"Failed to save listing {hemnet_id}")
                             else:
-                                logger.warning(f"Failed to save listing {hemnet_id} to database")
-                        else:
-                            logger.info(f"Listing {hemnet_id} already exists in the database")
-                            consecutive_existing_count += 1
-                            page_consecutive_count += 1
-                            
-                            # If we've found 50 consecutive existing listings, exit early
-                            if consecutive_existing_count >= 50:
-                                logger.info(f"Found {consecutive_existing_count} consecutive existing listings. Early termination.")
-                                return
-                except Exception as e:
-                    logger.error(f"Error processing individual listing {href}: {e}")
-                    exceptions.append(e)
-                    consecutive_existing_count = 0  # Reset on error
-                    page_consecutive_count = 0
-                    continue
-            
-            # If an entire page of listings already exist, exit
-            if page_consecutive_count == len(hrefs):
-                logger.info(f"Entire page {x} contains existing listings. Stopping execution.")
-                return
-            
-    except Exception as e:
-        logger.error(f"Error in main page processing loop: {e}")
-        exceptions.append(e)
-    finally:
-        close_browser(playwright, browser)
-        logger.info(f"Script completed. Encountered {len(exceptions)} exceptions")
-        logger.info(f"Fields with null values: {nulls}")
+                                consecutive_existing_count += 1
+                                if consecutive_existing_count >= 50:
+                                    return
+                        del listingData
+                    except Exception as e:
+                        logger.error(f"Error processing listing {href}: {e}")
+                        consecutive_existing_count = 0
+                        continue
+                
+                # Force garbage collection after each page
+                gc.collect()
+                
+        except Exception as e:
+            logger.error(f"Fatal error in main: {e}")
+            raise
+        finally:
+            logger.info(f"Script completed. Encountered {len(exceptions)} exceptions")
+            logger.info(f"Fields with null values: {nulls}")
         
 if __name__ == "__main__":
     main()

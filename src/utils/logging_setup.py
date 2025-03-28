@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import datetime
+import time
 
 def setup_logging():
     logger = logging.getLogger('hemnet_scraper')
@@ -38,7 +39,11 @@ def setup_logging():
     try:
         file_handler = logging.FileHandler(log_path)
         file_handler.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        # Add %z to include timezone offset in the timestamp
+        formatter = logging.Formatter('%(asctime)s %(z)s - %(name)s - %(levelname)s - %(message)s',
+                                   datefmt='%Y-%m-%d %H:%M:%S')
+        # Add converter to handle local time properly
+        formatter.converter = time.localtime
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     except Exception as e:
@@ -46,6 +51,7 @@ def setup_logging():
 
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
+    # Use same formatter for console
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 

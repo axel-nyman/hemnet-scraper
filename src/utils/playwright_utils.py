@@ -1,6 +1,6 @@
 from playwright.sync_api import sync_playwright
 import random
-import time
+from contextlib import contextmanager
 
 # List of common user agents for rotation
 USER_AGENTS = [
@@ -15,30 +15,29 @@ def get_random_user_agent():
     """Return a random user agent from the list"""
     return random.choice(USER_AGENTS)
 
-def add_delay(min_seconds=2, max_seconds=5):
-    """Add a random delay between requests"""
-    delay = random.uniform(min_seconds, max_seconds)
-    time.sleep(delay)
-    return delay
+@contextmanager
+def browser_context():
+    """Context manager for browser handling that ensures proper cleanup"""
+    playwright = None
+    browser = None
+    try:
+        playwright = sync_playwright().start()
+        browser = playwright.webkit.launch(headless=True)
+        yield playwright, browser
+    finally:
+        if browser:
+            browser.close()
+        if playwright:
+            playwright.stop()
 
-def start_browser():
-    """Start browser with a random user agent"""
-    playwright = sync_playwright().start()
-    user_agent = get_random_user_agent()
-    browser = playwright.webkit.launch(
-        headless=True,
-    )
-    return playwright, browser
-
-def create_page_with_user_agent(browser):
-    """Create a new page with a random user agent"""
+@contextmanager
+def page_context(browser):
+    """Context manager for page handling that ensures proper cleanup"""
     user_agent = get_random_user_agent()
     context = browser.new_context(user_agent=user_agent)
     page = context.new_page()
-    return page
-
-def close_browser(playwright, browser):
-    if browser:
-        browser.close()
-    if playwright:
-        playwright.stop()
+    try:
+        yield page
+    finally:
+        page.close()
+        context.close()

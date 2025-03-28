@@ -1,10 +1,10 @@
-from bs4 import BeautifulSoup
+import gc
+from bs4 import BeautifulSoup, SoupStrainer
 import json
 from datetime import datetime
 import locale
-import random
 from utils.logging_setup import setup_logging
-from utils.playwright_utils import start_browser, close_browser, create_page_with_user_agent, add_delay
+from utils.playwright_utils import browser_context, page_context
 from utils.database_utils import store_sold_listing
 
 logger = setup_logging()
@@ -68,61 +68,40 @@ def parse_swedish_date(date_str):
 BASE_URL_SOLD = "https://www.hemnet.se/salda/bostader?page="
 
 def get_sold_listing_urls(page_number, browser):
-    listings = list()
-    url = BASE_URL_SOLD + str(page_number)
+    url = f"https://www.hemnet.se/salda/bostader?page={page_number}"
     logger.info(f"Fetching sold listings from page {page_number}: {url}")
-    try:
-        # Use the new function to create a page with random user agent
-        page = create_page_with_user_agent(browser)
-        
-        # Add a random delay before request
-        delay = add_delay(3, 7)
-        logger.debug(f"Waiting {delay:.2f} seconds before requesting page {page_number}")
-        
-        page.goto(url)
-        
-        # Add a small delay after page load to ensure JavaScript execution
-        add_delay(1, 2)
-        
-        soup = BeautifulSoup(page.content(), 'html.parser')
-        
-        result_list = soup.find('div', attrs={'data-testid': 'result-list'})
-        
-        if not result_list:
-            logger.warning(f"Result list not found on page {page_number}")
-            page.close()
-            return listings
-        
-        for link in result_list.find_all('a'):
-            href = link.get('href')
-            if href and href.startswith('/salda'):
-                listings.append(href)
-        
-        logger.info(f"Found {len(listings)} sold listings on page {page_number}")
-        page.close()
-        return listings
-    except Exception as e:
-        logger.error(f"Error fetching sold listing URLs from page {page_number}: {e}")
-        if 'page' in locals() and page:
-            page.close()
-        return []
+    
+    with page_context(browser) as page:
+        try:
+            page.goto(url, wait_until="domcontentloaded")            
+            parse_only = SoupStrainer('div', attrs={'data-testid': 'result-list'})
+            soup = BeautifulSoup(page.content(), 'html.parser', parse_only=parse_only)
+            
+            if not soup:
+                logger.warning(f"Result list not found on page {page_number}")
+                return
+            
+            for link in soup.find_all('a'):
+                href = link.get('href')
+                if href and href.startswith('/salda'):
+                    yield href
+                    
+        except Exception as e:
+            logger.error(f"Error fetching sold listing URLs from page {page_number}: {e}")
 
 def extract_listing_data_from_json(html_content):
-    """Extract all listing data from the embedded JSON in the page"""
-    soup = BeautifulSoup(html_content, 'html.parser')
+    """Extract listing data with minimal memory usage"""
+    # Only parse the script tag we need
+    parse_only = SoupStrainer('script', id='__NEXT_DATA__')
+    soup = BeautifulSoup(html_content, 'html.parser', parse_only=parse_only)
     
-    # Find the Next.js data script
-    next_data_script = soup.find("script", id="__NEXT_DATA__")
-    
+    next_data_script = soup.find()
     if not next_data_script or not next_data_script.string:
         logger.warning("No __NEXT_DATA__ script found in the page")
         return None, None, {}
     
     try:
-        # Parse the JSON data
         data = json.loads(next_data_script.string)
-        
-        # Navigate to the relevant sections
         page_props = data.get("props", {}).get("pageProps", {})
         sale_id = page_props.get("saleId")
         
@@ -130,10 +109,7 @@ def extract_listing_data_from_json(html_content):
             logger.warning("No sale ID found in the page data")
             return None, None, {}
         
-        # Get Apollo state which contains the listing data
         apollo_state = page_props.get("__APOLLO_STATE__", {})
-        
-        # Find the listing data using the sale ID
         listing_key = f"SoldPropertyListing:{sale_id}"
         
         if listing_key not in apollo_state:
@@ -145,12 +121,12 @@ def extract_listing_data_from_json(html_content):
         sale_date_str = listing_data.get("formattedSoldAt", "")
         sale_date_datetime = parse_swedish_date(sale_date_str)
         
-        # Extract using amount values instead of formatted values
+        # Extract only needed data
         extracted_data = {
             "title": f"{listing_data.get('housingForm', {}).get('name', '')} {listing_data.get('formattedLivingArea', '')} - {listing_data.get('locationName', '')}",
             "final_price": listing_data.get("sellingPrice", {}).get("amount") if listing_data.get("sellingPrice") else None,
             "sale_date_str": sale_date_str,
-            "sale_date": sale_date_datetime.strftime('%Y-%m-%d') if sale_date_datetime else None,
+            "sale_date": parse_swedish_date(listing_data.get("formattedSoldAt")),
             "asking_price": listing_data.get("askingPrice", {}).get("amount") if listing_data.get("askingPrice") else None,
             "price_change": listing_data.get("priceChange", {}).get("amount") if listing_data.get("priceChange") else None,
             "price_change_percentage": listing_data.get("priceChangePercentage") if "priceChangePercentage" in listing_data else None,
@@ -162,109 +138,73 @@ def extract_listing_data_from_json(html_content):
             "running_costs": listing_data.get("runningCosts", {}).get("amount") if listing_data.get("runningCosts") else None,
             "rooms": listing_data.get("numberOfRooms"),
             "construction_year": listing_data.get("legacyConstructionYear", ""),
-            "broker_agency": apollo_state.get(listing_data.get("brokerAgency", {}).get("__ref", ""), {}).get("name", "") if listing_data.get("brokerAgency") else ""
+            "broker_agency": apollo_state.get(listing_data.get("brokerAgency", {}).get("__ref", ""), {}).get("name", "") if listing_data.get("brokerAgency") else ""            # ...other needed fields...
         }
         
-        logger.info(f"Successfully extracted JSON data for sold listing {sale_id}")
-        return sale_id, original_listing_id, extracted_data
+        # Clean up large objects
+        del data
+        del page_props
+        del apollo_state
         
-    except json.JSONDecodeError as e:
-        logger.error(f"Error parsing JSON data: {e}")
+        return sale_id, listing_data.get("listingId"), extracted_data
+        
     except Exception as e:
         logger.error(f"Error extracting data from JSON: {e}")
-    
-    return None, None, {}
+        return None, None, {}
 
 def get_sold_listing_data(url, browser):
     logger.info(f"Fetching data for sold listing: {url}")
-    try:
-        # Use the new function to create a page with random user agent
-        page = create_page_with_user_agent(browser)
-        
-        # Add a random delay before request
-        delay = add_delay(2, 5)
-        logger.debug(f"Waiting {delay:.2f} seconds before requesting {url}")
-        
-        page.goto(url)
-        
-        # Add a small delay after page load to ensure JavaScript execution
-        add_delay(1, 2)
-        
-        html_content = page.content()
-        
-        # Extract data from JSON
-        sale_id, original_listing_id, json_data = extract_listing_data_from_json(html_content)
-        
-        if json_data:
-            json_data["sale_hemnet_id"] = sale_id
-            json_data["original_hemnet_id"] = original_listing_id
-            json_data["url"] = url
+    
+    with page_context(browser) as page:
+        try:
+            page.goto(url, wait_until="domcontentloaded")            
+            html_content = page.content()
+            sale_id, original_listing_id, json_data = extract_listing_data_from_json(html_content)
             
-            logger.info(f"Successfully processed data for sold listing {sale_id}")
-            page.close()
-            return json_data
-        else:
-            logger.warning(f"No data extracted for {url}")
-            page.close()
+            if json_data:
+                json_data["sale_hemnet_id"] = sale_id
+                json_data["original_hemnet_id"] = original_listing_id
+                json_data["url"] = url
+                return json_data
             return {}
-    except Exception as e:
-        logger.error(f"Error processing sold listing {url}: {e}")
-        if 'page' in locals() and page:
-            page.close()
-        return {}
-
+            
+        except Exception as e:
+            logger.error(f"Error processing sold listing {url}: {e}")
+            return {}
 
 def main():
-    playwright, browser = start_browser()
-    
-    try:
-        consecutive_existing_count = 0
-        
-        for page in range(1, 51):
-            # Add a longer delay between pages to be respectful
-            delay = add_delay(5, 10)
-            logger.info(f"Waiting {delay:.2f} seconds before processing page {page}")
+    with browser_context() as (playwright, browser):
+        try:
+            consecutive_existing_count = 0
             
-            urls = get_sold_listing_urls(page, browser)
-            logger.info(f"Processing {len(urls)} sold listings from page {page}")
-            
-            page_consecutive_count = 0  # Track consecutive listings for this page
-            
-            for url in urls:
-                try:
-                    data = get_sold_listing_data("https://www.hemnet.se" + url, browser)
-                    if data:
-                        success, already_exists = store_sold_listing(data)
-                        
-                        if not already_exists:
-                            # Reset counters if a new listing is found
-                            consecutive_existing_count = 0
-                            page_consecutive_count = 0
-                        else:
-                            consecutive_existing_count += 1
-                            page_consecutive_count += 1
-                        
-                        # If 50 consecutive existing sales are found, stop
-                        if consecutive_existing_count >= 50:
-                            logger.info("Found 50 consecutive existing sales, stopping execution")
-                            return
-                    else:
-                        logger.warning(f"No data returned for {url}")
-                except Exception as e:
-                    logger.error(f"Error processing individual sold listing {url}: {e}")
-                    consecutive_existing_count = 0
-                    page_consecutive_count = 0
-                    continue
-            
-            # If an entire page of listings already exist, exit
-            if page_consecutive_count == len(urls):
-                logger.info(f"Entire page {page} contains existing listings. Stopping execution.")
-                return
-    except Exception as e:
-        logger.error(f"Error in main page processing loop: {e}")
-    finally:
-        close_browser(playwright, browser)
-        logger.info("Scraping complete.")
+            for page in range(1, 51):                
+                for url in get_sold_listing_urls(page, browser):
+                    try:
+                        data = get_sold_listing_data("https://www.hemnet.se" + url, browser)
+                        if data:
+                            success, already_exists = store_sold_listing(data)
+                            
+                            if already_exists:
+                                consecutive_existing_count += 1
+                                if consecutive_existing_count >= 50:
+                                    logger.info("Found 50 consecutive existing sales, stopping execution")
+                                    return
+                            else:
+                                consecutive_existing_count = 0
+                            
+                            # Clean up data after processing
+                            del data
+                            
+                    except Exception as e:
+                        logger.error(f"Error processing individual sold listing {url}: {e}")
+                        consecutive_existing_count = 0
+                        continue
+                
+                # Force garbage collection after each page
+                gc.collect()
+                
+        except Exception as e:
+            logger.error(f"Error in main page processing loop: {e}")
 
 if __name__ == "__main__":
     main()
