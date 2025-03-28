@@ -39,11 +39,16 @@ def setup_logging():
     try:
         file_handler = logging.FileHandler(log_path)
         file_handler.setLevel(logging.INFO)
-        # Add %z to include timezone offset in the timestamp
-        formatter = logging.Formatter('%(asctime)s %(z)s - %(name)s - %(levelname)s - %(message)s',
-                                   datefmt='%Y-%m-%d %H:%M:%S')
-        # Add converter to handle local time properly
+        
+        # Modified formatter without %(z)s and with timezone info in datefmt
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S %Z'
+        )
+        
+        # Use localtime for correct timezone
         formatter.converter = time.localtime
+        
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     except Exception as e:
@@ -51,7 +56,6 @@ def setup_logging():
 
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    # Use same formatter for console
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
