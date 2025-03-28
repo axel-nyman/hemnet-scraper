@@ -1,5 +1,5 @@
 # Use buildx for multi-architecture support
-FROM --platform=$BUILDPLATFORM python:3.9-slim AS builder
+FROM --platform=$TARGETPLATFORM python:3.9-slim AS builder
 
 # Set work directory
 WORKDIR /app
