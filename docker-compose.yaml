@@ -3,6 +3,7 @@ services:
     image: axelnyman/hemnet-scraper:latest
     platform: linux/arm64
     container_name: hemnet_scraper
+    restart: unless-stopped
     environment:
       - LOG_DIR=/app/logs
       - DB_HOST=db
@@ -20,6 +21,7 @@ services:
     image: postgres:latest
     platform: linux/arm64
     container_name: hemnet_scraper_db
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=real_estate
       - POSTGRES_USER=${DB_USER:-postgres}
@@ -34,6 +36,7 @@ services:
     image: jupyter/base-notebook:latest
     platform: linux/arm64
     container_name: hemnet_jupyter
+    restart: unless-stopped
     user: root
     environment:
       - JUPYTER_ENABLE_LAB=yes
